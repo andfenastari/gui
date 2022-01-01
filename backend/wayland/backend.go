@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"sync/atomic"
 )
 
 type Backend struct {
@@ -19,22 +20,56 @@ func NewBackend() (b Backend, err error) {
 	b.Conn, b.File, err = connect()
 	b.PrevObjectId = 1
 
+	registryId := b.NewObjectId()
+	callbackId := b.NewObjectId()
+
 	var msg Message
-	msg = NewGetRegistry(NewObjectId())
+
+	msg = NewMessage(DisplayId, OpDisplayGetRegistry, RequestDisplayGetRegistry{
+		Registry: registryId,
+	})
+
 	err = msg.Write(b.Conn)
 	if err != nil {
 		return b, fmt.Errorf("writing get_registry message: %w", err)
 	}
-	log.Print(msg)
+
+	msg = NewMessage(DisplayId, OpDisplaySync, RequestDisplaySync{
+		Callback: callbackId,
+	})
+	err = msg.Write(b.Conn)
+	if err != nil {
+		return b, fmt.Errorf("writing sync message: %w", err)
+	}
+
 	for {
 		msg, err = ReadMessage(b.Conn)
 		if err != nil {
 			return b, fmt.Errorf("reading registry global message: %w", err)
 		}
 
-		var ev EventRegistryGlobal
-		msg.Unmarshall(&ev)
-		log.Printf("%[1]T %[1]v", ev)	
+		switch msg.ObjectId {
+		case registryId:
+			switch msg.Opcode {
+			case OpRegistryGlobal:
+				var ev EventRegistryGlobal
+				msg.Unmarshall(&ev)
+				log.Printf("global: %v", ev)
+			default:
+				log.Printf("unknown: %v", msg)
+			}
+		case callbackId:
+			switch msg.Opcode {
+			case OpCallbackDone:
+				var ev EventCallbackDone
+				msg.Unmarshall(&ev)
+				log.Printf("done: %v", ev)
+			default:
+				log.Printf("unknown: %v", msg)
+			}
+		default:
+			log.Printf("unknown: %v", msg)
+		}
 	}
 
 	return
@@ -42,7 +77,13 @@ func NewBackend() (b Backend, err error) {
 
 func (b *Backend) Close() {
 	b.Conn.Close()
-	b.File.Close()
+	if b.File != nil {
+		b.File.Close()
+	}
+}
+
+func (b *Backend) NewObjectId() ObjectId {
+	return ObjectId(atomic.AddUint32(&b.PrevObjectId, 1))
 }
 
 func connect() (conn net.Conn, f *os.File, err error) {
