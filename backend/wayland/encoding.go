@@ -278,7 +278,7 @@ func marshallString(w io.Writer, s string) (err error) {
 		return fmt.Errorf("marshalling string value: %w", err)
 	}
 
-	b := make([]byte, l+p+1)
+	b := make([]byte, l+p)
 	copy(b, []byte(s))
 	_, err = w.Write(b)
 	if err != nil {

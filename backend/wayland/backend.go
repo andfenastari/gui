@@ -14,19 +14,22 @@ type Backend struct {
 	Conn         net.Conn
 	File         *os.File
 	PrevObjectId uint32
+
+	RegistryId   ObjectId
+	CompositorId ObjectId
+	SurfaceId    ObjectId
 }
 
 func NewBackend() (b Backend, err error) {
 	b.Conn, b.File, err = connect()
 	b.PrevObjectId = 1
 
-	registryId := b.NewObjectId()
-	callbackId := b.NewObjectId()
+	b.RegistryId = b.NewObjectId()
+	syncCallbackId := b.NewObjectId()
 
 	var msg Message
-
-	msg = NewMessage(DisplayId, OpDisplayGetRegistry, RequestDisplayGetRegistry{
-		Registry: registryId,
+	msg = NewMessage(DisplayId, OpDisplayGetRegistry, DisplayGetRegistry{
+		Registry: b.RegistryId,
 	})
 
 	err = msg.Write(b.Conn)
@@ -34,43 +37,64 @@ func NewBackend() (b Backend, err error) {
 		return b, fmt.Errorf("writing get_registry message: %w", err)
 	}
 
-	msg = NewMessage(DisplayId, OpDisplaySync, RequestDisplaySync{
-		Callback: callbackId,
+	msg = NewMessage(DisplayId, OpDisplaySync, DisplaySync{
+		Callback: syncCallbackId,
 	})
 	err = msg.Write(b.Conn)
 	if err != nil {
 		return b, fmt.Errorf("writing sync message: %w", err)
 	}
 
-	for {
+	done := false
+	for !done {
 		msg, err = ReadMessage(b.Conn)
 		if err != nil {
 			return b, fmt.Errorf("reading registry global message: %w", err)
 		}
+		log.Printf("received message: %v", msg)
 
-		switch msg.ObjectId {
-		case registryId:
-			switch msg.Opcode {
-			case OpRegistryGlobal:
-				var ev EventRegistryGlobal
-				msg.Unmarshall(&ev)
-				log.Printf("global: %v", ev)
-			default:
-				log.Printf("unknown: %v", msg)
+		switch {
+		case msg.ObjectId == syncCallbackId:
+			log.Printf("received callback %d", msg.ObjectId)
+			done = true
+
+		case msg.ObjectId == b.RegistryId && msg.Opcode == OpRegistryGlobal:
+			var ev RegistryGlobal
+			msg.Unmarshall(&ev)
+			log.Printf("global: %v", ev)
+
+			if ev.Interface == "wl_compositor" {
+				b.CompositorId = b.NewObjectId()
+				msg = NewMessage(b.RegistryId, OpRegistryBind, RegistryBind{
+					Name: ev.Name,
+					Interface: ev.Interface,
+					Version: ev.Version,
+					Id:   b.CompositorId,
+				})
+				log.Printf("bind message: %v", msg)
+				err = msg.Write(b.Conn)
+				if err != nil {
+					return b, fmt.Errorf("binding to compositor: %w", err)
+				}
+				log.Printf("bound to compositor %d", b.CompositorId)
 			}
-		case callbackId:
-			switch msg.Opcode {
-			case OpCallbackDone:
-				var ev EventCallbackDone
-				msg.Unmarshall(&ev)
-				log.Printf("done: %v", ev)
-			default:
-				log.Printf("unknown: %v", msg)
-			}
-		default:
-			log.Printf("unknown: %v", msg)
+		case msg.ObjectId == DisplayId && msg.Opcode == OpDisplayError:
+			var ev DisplayError
+			msg.Unmarshall(&ev)
+			log.Fatalf("error: %v", ev)
 		}
+
 	}
+
+	b.SurfaceId = b.NewObjectId()
+	msg = NewMessage(b.CompositorId, OpCompositorCreateSurface, CompositorCreateSurface{
+		Id: b.SurfaceId,
+	})
+	err = msg.Write(b.Conn)
+	if err != nil {
+		return b, fmt.Errorf("creating suface: %w", err)
+	}
+	log.Printf("created surface %d", b.SurfaceId)
 
 	return
 }
