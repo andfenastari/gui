@@ -36,10 +36,10 @@ type DisplayError struct {
 }
 
 type RegistryBind struct {
-	Name uint32
+	Name      uint32
 	Interface string
-	Version uint32
-	Id   ObjectId
+	Version   uint32
+	Id        ObjectId
 }
 
 type RegistryGlobal struct {

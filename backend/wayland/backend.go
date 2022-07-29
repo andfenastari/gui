@@ -22,8 +22,11 @@ type Backend struct {
 
 func NewBackend() (b Backend, err error) {
 	b.Conn, b.File, err = connect()
-	b.PrevObjectId = 1
+	if err != nil {
+		return b, fmt.Errorf("initializing wayland socket connection: %w", err)
+	}
 
+	b.PrevObjectId = 1
 	b.RegistryId = b.NewObjectId()
 	syncCallbackId := b.NewObjectId()
 
@@ -66,10 +69,10 @@ func NewBackend() (b Backend, err error) {
 			if ev.Interface == "wl_compositor" {
 				b.CompositorId = b.NewObjectId()
 				msg = NewMessage(b.RegistryId, OpRegistryBind, RegistryBind{
-					Name: ev.Name,
+					Name:      ev.Name,
 					Interface: ev.Interface,
-					Version: ev.Version,
-					Id:   b.CompositorId,
+					Version:   ev.Version,
+					Id:        b.CompositorId,
 				})
 				log.Printf("bind message: %v", msg)
 				err = msg.Write(b.Conn)
