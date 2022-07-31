@@ -1,6 +1,6 @@
 package x
 
-type Window uint32
+type WindowId uint32
 type Pixmap uint32
 type Cursor uint32
 type Font uint32
@@ -100,36 +100,43 @@ const (
 type KeyCode Card8
 
 type InitResponse struct {
+	Pad0                 Card8
 	ProtocolMajorVersion Card16
 	ProtocolMinorVersion Card16
+	Pad1                 Card16
 	ReleaseNumber        Card32
 	ResourceIdBase       Card32
 	ResourceIdMask       Card32
 	MotionBufferSize     Card32
+	VendorLength         Card16
 	MaximumRequestLength Card16
+	RootsLength          Card8
+	PixmapFormatsLength  Card8
 	ImageByteOrder       ByteOrder
 	BitmapBitOrder       ByteOrder
 	BitmapScanlineUnit   Card8
 	BitmapScanlinePad    Card8
 	MinKeyCode           KeyCode
 	MaxKeyCode           KeyCode
-	Vendor               string
-	PixmapFormats        []Format
-	Roots                []Screen
+	Pad2                 Card32
+	Vendor               string   `lengthField:"VendorLength"`
+	PixmapFormats        []Format `lengthField:"PixmapFormatsLength"`
+	Roots                []Screen `lengthField:"RootsLength"`
 }
 
 type Format struct {
 	Depth        Card8
 	BitsPerPixel Card8
 	ScanlinePad  Card8
+	Pad0         [5]Card8
 }
 
 type Screen struct {
-	Root                Window
+	Root                WindowId
 	DefaultColormap     Colormap
 	WhitePixel          Card32
 	BlackPixel          Card32
-	CurrentInputMasks   []Event
+	CurrentInputMasks   Card32
 	WidthInPixels       Card16
 	HeightInPixels      Card16
 	WidthInMillimiters  Card16
@@ -140,12 +147,16 @@ type Screen struct {
 	BackingStores       Card8
 	SaveUnders          Bool
 	RootDepth           Card8
-	AllowedDepths       []Depth
+	AllowedDepthsLength Card8
+	AllowedDepths       []Depth `lengthField:"AllowedDepthsLength"`
 }
 
 type Depth struct {
-	Depth   Card8
-	Visuals []VisualType
+	Depth         Card8
+	Pad0          Card8
+	VisualsLength Card16
+	Pad1          Card32
+	Visuals       []VisualType `lengthField:"VisualsLength"`
 }
 
 type VisualType struct {
@@ -156,6 +167,7 @@ type VisualType struct {
 	RedMask         Card32
 	GreenMask       Card32
 	BlueMask        Card32
+	Pad0            Card32
 }
 
 type VisualClass Card8

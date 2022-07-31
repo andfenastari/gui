@@ -2,8 +2,10 @@ package x
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"strconv"
@@ -23,13 +25,15 @@ type Backend struct {
 	err          error
 
 	initResponse InitResponse
+	nextId       Card32
 }
 
-func NewBackend() (b *Backend, err error) {
-	b = new(Backend)
+type Window struct{}
+
+func (b *Backend) Init() (err error) {
 	b.conn, err = connect()
 	if err != nil {
-		return nil, fmt.Errorf("initializing backend connection: %w", err)
+		return fmt.Errorf("initializing backend connection: %w", err)
 	}
 
 	b.byteOrder = binary.BigEndian
@@ -44,69 +48,45 @@ func NewBackend() (b *Backend, err error) {
 	b.writeUnused(2)   // Padding
 
 	if b.err != nil {
-		return nil, fmt.Errorf("sending init request: %w", b.err)
+		return fmt.Errorf("sending init request: %w", b.err)
 	}
 
 	var success Card8
 	b.read(&success)
 
 	if b.err != nil {
-		return nil, fmt.Errorf("reading init response: %w", b.err)
+		return fmt.Errorf("reading init response: %w", b.err)
 	}
 
 	if success != 1 {
-		return nil, fmt.Errorf("init response %d: %w", success, ErrNotImplemented)
+		return fmt.Errorf("init response %d: %w", success, ErrNotImplemented)
 	}
 
-	var ir InitResponse
-	b.readInitResponse(&ir)
+	//b.readInitResponse(&b.initResponse)
+	b.unmarshall(&b.initResponse)
 	if b.err != nil {
-		return nil, fmt.Errorf("reading init response: %w", b.err)
+		return fmt.Errorf("reading init response: %w", b.err)
 	}
-	
-	fmt.Printf("Init Response = %#v\n", ir)
 
-	return
+	pprint(b.initResponse)
+
+	return nil
 }
 
 func (b *Backend) Close() {
 	b.conn.Close()
 }
 
-func (b *Backend) write(data interface{}) {
-	if b.err != nil {
-		return
-	}
+func (b *Backend) OpenWindow(title string, width, height int) (w *Window, err error) {
+	w = new(Window)
 
-	b.err = binary.Write(b.conn, b.byteOrder, data)
-	b.bytesWritten += binary.Size(data)
+	return w, nil
 }
 
-func (b *Backend) writeUnused(n int) {
-	var buf [6]Card8
-	b.write(buf[0:n])
-}
-
-func (b *Backend) writePadding() {
-	b.writeUnused((4 - b.bytesWritten%4) % 4)
-}
-
-func (b *Backend) read(data interface{}) {
-	if b.err != nil {
-		return
-	}
-
-	b.err = binary.Read(b.conn, b.byteOrder, data)
-	b.bytesRead += binary.Size(data)
-}
-
-func (b *Backend) readUnused(n int) {
-	var buf [6]Card8
-	b.read(buf[0:n])
-}
-
-func (b *Backend) readPadding() {
-	b.readUnused((4-b.bytesRead%4)%4)
+func (b *Backend) allocId() (n Card32) {
+	n = b.nextId | b.initResponse.ResourceIdBase
+	b.nextId++
+	return
 }
 
 func connect() (conn net.Conn, err error) {
@@ -164,4 +144,12 @@ func parseDisplay(spec string) (host string, display, screen int, err error) {
 	}
 
 	return
+}
+
+func pprint(v interface{}) {
+	j, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(j))
 }

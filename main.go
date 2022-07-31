@@ -6,7 +6,8 @@ import (
 )
 
 func main() {
-	b, err := x.NewBackend()
+	var b x.Backend
+	err := b.Init()
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
