@@ -2,7 +2,7 @@ package x
 
 import (
 	"encoding/binary"
-	"fmt"
+	// "fmt"
 	"reflect"
 )
 
@@ -15,7 +15,6 @@ func (b *Backend) unmarshall(data interface{}) {
 }
 
 func (b *Backend) unmarshallValue(value reflect.Value) {
-	fmt.Println("foo")
 	switch value.Kind() {
 	case reflect.Struct:
 		for i := 0; i < value.NumField(); i++ {
@@ -33,11 +32,9 @@ func (b *Backend) unmarshallValue(value reflect.Value) {
 }
 
 func (b *Backend) unmarshallField(value reflect.Value, field int) {
-	fmt.Println("bar")
 	fieldValue := value.Field(field)
 	fieldKind := fieldValue.Kind()
 	sfield := value.Type().Field(field)
-	fmt.Println(sfield.Name)
 
 	if fieldKind != reflect.Slice && fieldKind != reflect.String {
 		b.unmarshallValue(fieldValue)
@@ -54,7 +51,6 @@ func (b *Backend) unmarshallField(value reflect.Value, field int) {
 
 	lengthValue := value.FieldByName(lengthField)
 	length := lengthValue.Uint()
-	fmt.Println(length)
 
 	if fieldKind == reflect.Slice {
 		slc := fieldValue
